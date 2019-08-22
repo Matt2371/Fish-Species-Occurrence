@@ -11,6 +11,27 @@ arcpy.env.workspace = "C:/Users/15303/Documents/CWS_Programming/species_occurenc
 target_features = "NHDFlowline"
 features = arcpy.ListFeatureClasses() #creates list of all features classes in working directory (watershed level fish species occurence)
 
+# adds DOUBLE COMID field to join, set equal to PernamentID (to prepare for NHDPlus table join)
+
+arcpy.AddField_management(target_features, "COMID", "DOUBLE")  # adds field, sets type to double
+
+in_table = target_features
+field = "COMID"
+expression = "!Permanent_Identifier!"  # set new field to equal "Permanent ID" values (matches COMID)
+
+arcpy.CalculateField_management(in_table, field, expression, "Python_9.3")
+
+# joins NDHPlus data
+
+inFeatures = target_features
+# defines file path of NHDPlus table
+joinTable = "C:/Users/15303/Documents/CWS_Programming/species_occurence/NHDPlusCA/NHDPlus18/NHDPlusAttributes/PlusFlowlineVAA.dbf"
+inField = "COMID"
+joinField = "ComID"
+
+# joins tables with COMID as the common field
+arcpy.JoinField_management(inFeatures, inField, joinTable, joinField)
+
 for i in features: #runs code for every species of fish
     join_features = i
     out_feature_class = "SpatialJoin" + "_" + join_features #names output feature class based on species name (join features)
@@ -18,28 +39,6 @@ for i in features: #runs code for every species of fish
     arcpy.SpatialJoin_analysis(target_features, join_features, out_feature_class, "JOIN_ONE_TO_ONE", match_option = "HAVE_THEIR_CENTER_IN")
 
 
-    #adds DOUBLE COMID field to join, set equal to PernamentID (to prepare for NHDPlus table join)
-
-    arcpy.AddField_management(out_feature_class, "COMID", "DOUBLE") #adds field, sets type to double
-
-    in_table = out_feature_class
-    field = "COMID"
-    expression = "!Permanent_Identifier!" #set new field to equal "Permanent ID" values (matches COMID)
-
-    arcpy.CalculateField_management(in_table, field, expression, "Python_9.3")
-
-
-
-    #joins NDHPlus data
-
-    inFeatures = out_feature_class
-    #defines file path of NHDPlus table
-    joinTable = "C:/Users/15303/Documents/CWS_Programming/species_occurence/NHDPlusCA/NHDPlus18/NHDPlusAttributes/PlusFlowlineVAA.dbf"
-    inField = "COMID"
-    joinField = "ComID"
-
-    #joins tables with COMID as the common field
-    arcpy.JoinField_management(inFeatures, inField, joinTable, joinField)
 
 
 
