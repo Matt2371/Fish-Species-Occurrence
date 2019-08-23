@@ -17,31 +17,8 @@ print('List feature classes', end='\t')
 print(datetime.datetime.now().time())
 
 
-# adds DOUBLE COMID field to join, set equal to PernamentID (to prepare for NHDPlus table join)
-print('Add double type COMID field, set equal to permID', end='\t')
-print(datetime.datetime.now().time())
-target_features = "NHDFlowline"
-arcpy.AddField_management(target_features, "COMID", "DOUBLE")  # adds field, sets type to double
 
-in_table = target_features
-field = "COMID"
-expression = "!Permanent_Identifier!"  # set new field to equal "Permanent ID" values (matches COMID)
-
-arcpy.CalculateField_management(in_table, field, expression, "Python_9.3")
-
-
-print('Join NHD+ table', end='\t')
-print(datetime.datetime.now().time())
-# joins NDHPlus data
-inFeatures = target_features
-# defines file path of NHDPlus table
-joinTable = "C:/Users/15303/Documents/CWS_Programming/species_occurence/NHDPlusCA/NHDPlus18/NHDPlusAttributes/PlusFlowlineVAA.dbf"
-inField = "COMID"
-joinField = "ComID"
-# joins tables with COMID as the common field
-arcpy.JoinField_management(inFeatures, inField, joinTable, joinField)
-
-
+target_features = "NHDFlowline" #NHD data/streams to join to watersheds
 
 for i in features: #runs spatial join code for every species of fish
     print(i+'_'+'spatial join', end='\t')
