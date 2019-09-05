@@ -20,14 +20,14 @@ print(datetime.datetime.now().time())
 
 
 target_features = "NHDFlowline" #NHD data/streams to join to watersheds
-arcpy.CopyFeatures_management("NHDFlowline", "FlowlineProbabilities") #copy of nhd data to update with probabilities
+arcpy.CopyFeatures_management("NHDFlowline", "in_memory/FlowlineProbabilities") #copy of nhd data to update with probabilities, to memory
 
 for i in features: #runs spatial join code for every species of fish
 
     print(i+' '+'spatial join', end='\t')
     print(datetime.datetime.now().time())
     join_features = i
-    out_feature_class = "SpatialJoin" + "_" + join_features #names output feature class based on species name (join features)
+    out_feature_class ="in_memory"+ "/" + "SpatialJoin" + "_" + join_features #names output feature class based on species name (join features), output to memory
     #performs spatial join
     arcpy.SpatialJoin_analysis(target_features, join_features, out_feature_class, "JOIN_ONE_TO_ONE", match_option = "HAVE_THEIR_CENTER_IN")
 
@@ -63,20 +63,26 @@ def getProbability(species, stream_order, join_count):
 #FIXME different probabilities for different species? use dict of dict?
 
 
-
-    arcpy.CalculateField_management(in_table, field, expression, "Python_9.3", codeblock)
     #fills out probability field
+    arcpy.CalculateField_management(in_table, field, expression, "Python_9.3", codeblock)
 
-    arcpy.AddIndex_management(out_feature_class, ["COMID"], "idx_COMID", "NON_UNIQUE") #add indexes to spatial join output
-    arcpy.AddIndex_management(out_feature_class, ["COMID", i], "idx_COMID_prob", "NON_UNIQUE")
-    arcpy.AddIndex_management(out_feature_class, [i], "idx_prob", "NON_UNIQUE")
 
-    # print(i + ' ' + 'update flowlineprob table', end='\t')
-    # print(datetime.datetime.now().time())
-    # arcpy.AddField_management("FlowlineProbabilities", i , "DOUBLE") #add field for species
-    # arcpy.CalculateField_management("FlowlineProbabilities", i, '!'+out_feature_class+'.Probability!' , "Python_9.3") #fills field with probability
-    #FIXME invalid field doesnt exist
-    # arcpy.JoinField_management("FlowlineProbabilities", "COMID", out_feature_class, "COMID", [i])
+    # arcpy.AddIndex_management(out_feature_class, ["COMID"], "idx_COMID", "NON_UNIQUE") #add indexes to spatial join output
+    # arcpy.AddIndex_management(out_feature_class, ["COMID", i], "idx_COMID_prob", "NON_UNIQUE")
+    # arcpy.AddIndex_management(out_feature_class, [i], "idx_prob", "NON_UNIQUE")
+
+    #updates flowlineprob table (output)
+    print(i + ' ' + 'update flowlineprob table', end='\t')
+    print(datetime.datetime.now().time())
+    arcpy.JoinField_management("in_memory/FlowlineProbabilities", "COMID", out_feature_class, "COMID", [i])
+
+    arcpy.Delete_management(out_feature_class) #delete spatial join class from memory (not needed)
+
+arcpy.CopyFeatures_management("in_memory/FlowlineProbabilities", "FlowlineProbabilites") #copy output back to disk
+arcpy.Delete_management("in_memory") #clear memory
+
+print('End', end='\t')
+print(datetime.datetime.now().time())
 
 
 
