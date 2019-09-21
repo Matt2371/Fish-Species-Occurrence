@@ -120,16 +120,16 @@ def getProbability(species, stream_order, join_count):"""
     codeblock += "}"  # close dict of dicts
 
     codeblock += """
-    #pdict = {"hardhead" : hardhead_dict, "rainbow_trout": rainbow_trout_dict}
-    #if stream segment not in spatial join, set prob to 0    
-    if join_count == 0:
-        return '0'
-    #if stream order is negative (coastline) or does not exist set prob to "NA"
-    if stream_order is None or stream_order < 0 or str(stream_order) == 'nan':
-        return 'N/A'
-    #call stream order/probability dictionary
-    else:
-        return str(pdict[species][stream_order])"""
+#pdict = {"hardhead" : hardhead_dict, "rainbow_trout": rainbow_trout_dict}
+#if stream segment not in spatial join, set prob to 0    
+\tif join_count == 0:
+\t\treturn '0'
+\t\t#if stream order is negative (coastline) or does not exist set prob to "NA"
+\tif stream_order is None or stream_order < 0 or str(stream_order) == 'nan':
+\t\treturn 'N/A'
+\t\t#call stream order/probability dictionary
+\telse:
+\t\treturn str(pdict[species][stream_order])"""
 
     print(codeblock)
 
