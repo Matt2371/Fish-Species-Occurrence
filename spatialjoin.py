@@ -1,21 +1,31 @@
 from __future__ import print_function
 import datetime
-print('Start', end='\t')
-print(datetime.datetime.now().time())
-import pandas as pd
+import logging
+
 import arcpy
 
-#builds codeblock for calculate field
-def probabilities_dict():
+log = logging.getLogger("fish_species_occurrence")
+logging.basicConfig()
+
+print('Start', end='\t')
+print(datetime.datetime.now().time())
+
+
+def probabilities_dict(nhd_data_gdb_path):
+    """
+        Builds codeblocks for calculate field
+    :return: string codeblock to feed into arcgis field calculations
+    """
     # set working directory - flowlines and huc12 (1)
-    arcpy.env.workspace = "C:/Users/15303/Documents/CWS_Programming/species_occurence/NHDPlusV2.gdb/"
+    arcpy.env.workspace = nhd_data_gdb_path
     arcpy.env.overwriteOutput = True
-    print('Set working directory to NHDPlusV2', end='\t')
-    print(datetime.datetime.now().time())
+
+    log.info('Set working directory to NHDPlusV2', end='\t')
+    log.info(datetime.datetime.now().time())
 
     # join nhdFlowline to HUC12's
-    print('Spatial Join HUC12 to NHD', end='\t')
-    print(datetime.datetime.now().time())
+    log.info('Spatial Join HUC12 to NHD', end='\t')
+    log.info(datetime.datetime.now().time())
     arcpy.SpatialJoin_analysis("NHDFlowline_Network", "HUC12FullState", "FlowlineSpatialJoin", "JOIN_ONE_TO_ONE",
                                match_option="HAVE_THEIR_CENTER_IN")
 
@@ -34,8 +44,8 @@ def probabilities_dict():
                                             '"StreamOrde" IS NOT NULL AND "StreamOrde" > 0')
 
     # Summarize HUC12 to find max stream order for each watershed
-    print('Run spatial join stats', end='\t')
-    print(datetime.datetime.now().time())
+    log.info('Run spatial join stats', end='\t')
+    log.info(datetime.datetime.now().time())
     arcpy.Statistics_analysis(target_layer_1, "Stats_1", [["StreamOrde", "MAX"]], "HUC_12")
 
     # join field to HUC12's
@@ -44,19 +54,19 @@ def probabilities_dict():
     if "MAX_StreamOrde" in fields:
         arcpy.DeleteField_management(target_features, "MAX_StreamOrde")
 
-    print('Join field to HUC12\'s', end='\t')
-    print(datetime.datetime.now().time())
+    log.info('Join field to HUC12\'s', end='\t')
+    log.info(datetime.datetime.now().time())
     arcpy.JoinField_management(target_features, "HUC_12", "Stats_1", "HUC_12", ["MAX_StreamOrde"])
 
     # set working directory - fish occurence (2)
     arcpy.env.workspace = "C:/Users/15303/Documents/CWS_Programming/species_occurence/species_ranges.gdb"
     arcpy.env.overwriteOutput = True
-    print('Set working directory to species ranges', end='\t')
-    print(datetime.datetime.now().time())
+    log.info('Set working directory to species ranges', end='\t')
+    log.info(datetime.datetime.now().time())
 
     # creates list of all features classes in working directory (watershed level fish species occurence)
-    print('List feature classes', end='\t')
-    print(datetime.datetime.now().time())
+    log.info('List feature classes', end='\t')
+    log.info(datetime.datetime.now().time())
     features = arcpy.ListFeatureClasses()
 
     # initiate codeblock string
@@ -71,19 +81,19 @@ def getProbability(species, stream_order, join_count):"""
         arcpy.MakeFeatureLayer_management(i, fish_layer)
         # select HUC12's by species occurrence and run (min) stats
         try:
-            print(i + ' select by location', end='\t')
-            print(datetime.datetime.now().time())
+            log.info(i + ' select by location', end='\t')
+            log.info(datetime.datetime.now().time())
             arcpy.SelectLayerByLocation_management(target_layer, "HAVE_THEIR_CENTER_IN", fish_layer)
 
-            print(i + ' summary statistics', end='\t')
-            print(datetime.datetime.now().time())
+            log.info(i + ' summary statistics', end='\t')
+            log.info(datetime.datetime.now().time())
             arcpy.Statistics_analysis(target_layer, "Stats_" + i, [["MAX_StreamOrde", "MIN"]])
         finally:
             arcpy.Delete_management(fish_layer)
 
         cursor = arcpy.da.SearchCursor("Stats_" + i, ['MIN_MAX_StreamOrde'])
         for row in cursor:
-            print(row[0])
+            log.info(row[0])
             min_stream = row[0]
 
         dict = {}
@@ -103,7 +113,7 @@ def getProbability(species, stream_order, join_count):"""
                 dict[j] = max_probability * (rate) ** iteration
                 iteration += 1  # if i is less than or equal to min stream order, decrease probability per iteration exponentially
 
-        print(dict)  # copy output as plain text
+        log.info(dict)  # copy output as plain text
         string_dict = str(dict)  # string to be concacenated to codeblock
         codeblock += ("\n" + "\t" + i + "_dict" + "=" + string_dict)  # add dictionary to codeblock
 
@@ -131,7 +141,7 @@ def getProbability(species, stream_order, join_count):"""
 \telse:
 \t\treturn str(pdict[species][stream_order])"""
 
-    print(codeblock)
+    log.info(codeblock)
 
     arcpy.Delete_management(target_layer)
     arcpy.Delete_management(target_layer_1)
@@ -141,13 +151,13 @@ def getProbability(species, stream_order, join_count):"""
 #set working directory
 arcpy.env.workspace = "C:/Users/15303/Documents/CWS_Programming/species_occurence/species_ranges.gdb"
 arcpy.env.overwriteOutput = True
-print('Set working directory', end='\t')
-print(datetime.datetime.now().time())
+log.info('Set working directory', end='\t')
+log.info(datetime.datetime.now().time())
 
 
 features = arcpy.ListFeatureClasses() #creates list of all features classes in working directory (watershed level fish species occurence)
-print('List feature classes', end='\t')
-print(datetime.datetime.now().time())
+log.info('List feature classes', end='\t')
+log.info(datetime.datetime.now().time())
 
 
 
@@ -159,16 +169,16 @@ codeblock = probabilities_dict() #gets codeblock (dictionary of dictionaries of 
 
 for i in features: #runs spatial join code for every species of fish
 
-    print(i+' '+'spatial join', end='\t')
-    print(datetime.datetime.now().time())
+    log.info(i+' '+'spatial join', end='\t')
+    log.info(datetime.datetime.now().time())
     join_features = i
     out_feature_class ="in_memory"+ "/" + "SpatialJoin" + "_" + join_features #names output feature class based on species name (join features), output to memory
     #performs spatial join
     arcpy.SpatialJoin_analysis(target_features, join_features, out_feature_class, "JOIN_ONE_TO_ONE", match_option = "HAVE_THEIR_CENTER_IN")
 
 
-    print(i+' '+'calculate probability', end='\t')
-    print(datetime.datetime.now().time())
+    log.info(i+' '+'calculate probability', end='\t')
+    log.info(datetime.datetime.now().time())
     #adds probability field
     arcpy.AddField_management(out_feature_class, i , "TEXT")
 
@@ -207,8 +217,8 @@ for i in features: #runs spatial join code for every species of fish
     # arcpy.AddIndex_management(out_feature_class, [i], "idx_prob", "NON_UNIQUE")
 
     #updates flowlineprob table (output)
-    print(i + ' ' + 'update flowlineprob table', end='\t')
-    print(datetime.datetime.now().time())
+    log.info(i + ' ' + 'update flowlineprob table', end='\t')
+    log.info(datetime.datetime.now().time())
     arcpy.JoinField_management("in_memory/FlowlineProbabilities", "COMID", out_feature_class, "COMID", [i])
 
     arcpy.Delete_management(out_feature_class) #delete spatial join class from memory (not needed)
@@ -216,8 +226,8 @@ for i in features: #runs spatial join code for every species of fish
 arcpy.CopyFeatures_management("in_memory/FlowlineProbabilities", "FlowlineProbabilites") #copy output back to disk
 arcpy.Delete_management("in_memory") #clear memory
 
-print('End', end='\t')
-print(datetime.datetime.now().time())
+log.info('End', end='\t')
+log.info(datetime.datetime.now().time())
 
 
 
