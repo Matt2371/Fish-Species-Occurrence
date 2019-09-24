@@ -7,8 +7,7 @@ import arcpy
 log = logging.getLogger("fish_species_occurrence")
 logging.basicConfig()
 
-log.info('Start', end='\t')
-log.info(datetime.datetime.now().time())
+log.info('Start\t{}'.format(datetime.datetime.now().time()))
 
 def get_min_stream_order_by_huc(nhd_flowline, huc12s, output_workspace):
     """
@@ -19,12 +18,10 @@ def get_min_stream_order_by_huc(nhd_flowline, huc12s, output_workspace):
     arcpy.env.workspace = output_workspace
     arcpy.env.overwriteOutput = True
 
-    log.info('Set working directory to NHDPlusV2', end='\t')
-    log.info(datetime.datetime.now().time())
+    log.info('Set working directory to NHDPlusV2\t{}'.format(datetime.datetime.now().time()))
 
     # join nhdFlowline to HUC12's
-    log.info('Spatial Join HUC12 to NHD', end='\t')
-    log.info(datetime.datetime.now().time())
+    log.info('Spatial Join HUC12 to NHD\t{}'.format(datetime.datetime.now().time()))
 
     flowline_features = "FlowlineSpatialJoin"
     arcpy.SpatialJoin_analysis(nhd_flowline, huc12s, flowline_features, "JOIN_ONE_TO_ONE",
@@ -35,14 +32,13 @@ def get_min_stream_order_by_huc(nhd_flowline, huc12s, output_workspace):
     arcpy.MakeFeatureLayer_management(huc12s, huc12_layer)
     flowline_layer = "Flowline_layer"
     arcpy.MakeFeatureLayer_management(flowline_features, flowline_layer)
-    try:
+    try:  # start a try block so we can clean up the feature layers no matter whether we exit this block on purpose or with an exception
         # exclude null and coastline from flowlines layer
         arcpy.SelectLayerByAttribute_management(flowline_layer, "NEW_SELECTION",
                                                 '"StreamOrde" IS NOT NULL AND "StreamOrde" > 0')
 
         # Summarize HUC12 to find max stream order for each watershed
-        log.info('Run spatial join stats', end='\t')
-        log.info(datetime.datetime.now().time())
+        log.info('Run spatial join stats\t{}'.format(datetime.datetime.now().time()))
         arcpy.Statistics_analysis(flowline_layer, "Stats_1", [["StreamOrde", "MAX"]], "HUC_12")
 
         # join field to HUC12's
@@ -51,8 +47,7 @@ def get_min_stream_order_by_huc(nhd_flowline, huc12s, output_workspace):
         if "MAX_StreamOrde" in all_fields:
             arcpy.DeleteField_management(flowline_features, "MAX_StreamOrde")
 
-        log.info('Join field to HUC12\'s', end='\t')
-        log.info(datetime.datetime.now().time())
+        log.info('Join field to HUC12\'s\t{}'.format(datetime.datetime.now().time()))
         arcpy.JoinField_management(target_features, "HUC_12", "Stats_1", "HUC_12", ["MAX_StreamOrde"])
     finally:
         arcpy.Delete_management(huc12_layer)
@@ -63,12 +58,10 @@ def build_codeblock():
     # set working directory - fish occurence (2)
     arcpy.env.workspace = "C:/Users/15303/Documents/CWS_Programming/species_occurence/species_ranges.gdb"
     arcpy.env.overwriteOutput = True
-    log.info('Set working directory to species ranges', end='\t')
-    log.info(datetime.datetime.now().time())
+    log.info('Set working directory to species ranges\t{}'.format(datetime.datetime.now().time()))
 
     # creates list of all features classes in working directory (watershed level fish species occurence)
-    log.info('List feature classes', end='\t')
-    log.info(datetime.datetime.now().time())
+    log.info('List feature classes\t{}'.format(datetime.datetime.now().time()))
     features = arcpy.ListFeatureClasses()
 
     # initiate codeblock string
@@ -82,12 +75,10 @@ def build_codeblock():
         arcpy.MakeFeatureLayer_management(i, fish_layer)
         # select HUC12's by species occurrence and run (min) stats
         try:
-            log.info(i + ' select by location', end='\t')
-            log.info(datetime.datetime.now().time())
+            log.info(i + ' select by location\t{}'.format(datetime.datetime.now().time()))
             arcpy.SelectLayerByLocation_management(huc12_layer, "HAVE_THEIR_CENTER_IN", fish_layer)
 
-            log.info(i + ' summary statistics', end='\t')
-            log.info(datetime.datetime.now().time())
+            log.info(i + ' summary statistics\t{}'.format(datetime.datetime.now().time()))
             arcpy.Statistics_analysis(huc12_layer, "Stats_" + i, [["MAX_StreamOrde", "MIN"]])
         finally:
             arcpy.Delete_management(fish_layer)
@@ -149,13 +140,11 @@ def build_codeblock():
 #set working directory
 arcpy.env.workspace = "C:/Users/15303/Documents/CWS_Programming/species_occurence/species_ranges.gdb"
 arcpy.env.overwriteOutput = True
-log.info('Set working directory', end='\t')
-log.info(datetime.datetime.now().time())
+log.info('Set working directory\t{}'.format(datetime.datetime.now().time()))
 
 
 features = arcpy.ListFeatureClasses() #creates list of all features classes in working directory (watershed level fish species occurence)
-log.info('List feature classes', end='\t')
-log.info(datetime.datetime.now().time())
+log.info('List feature classes\t{}'.format(datetime.datetime.now().time()))
 
 
 
@@ -167,18 +156,16 @@ codeblock = build_codeblock() #gets codeblock (dictionary of dictionaries of pro
 
 for i in features: #runs spatial join code for every species of fish
 
-    log.info(i+' '+'spatial join', end='\t')
-    log.info(datetime.datetime.now().time())
+    log.info(i+' '+'spatial join\t{}'.format(datetime.datetime.now().time()))
     join_features = i
     out_feature_class ="in_memory"+ "/" + "SpatialJoin" + "_" + join_features #names output feature class based on species name (join features), output to memory
     #performs spatial join
     arcpy.SpatialJoin_analysis(target_features, join_features, out_feature_class, "JOIN_ONE_TO_ONE", match_option = "HAVE_THEIR_CENTER_IN")
 
 
-    log.info(i+' '+'calculate probability', end='\t')
-    log.info(datetime.datetime.now().time())
+    log.info(i+' '+'calculate probability\t{}'.format(datetime.datetime.now().time()))
     #adds probability field
-    arcpy.AddField_management(out_feature_class, i , "TEXT")
+    arcpy.AddField_management(out_feature_class, i, "TEXT")
 
     in_table = out_feature_class
     field = i
@@ -215,8 +202,7 @@ for i in features: #runs spatial join code for every species of fish
     # arcpy.AddIndex_management(out_feature_class, [i], "idx_prob", "NON_UNIQUE")
 
     #updates flowlineprob table (output)
-    log.info(i + ' ' + 'update flowlineprob table', end='\t')
-    log.info(datetime.datetime.now().time())
+    log.info(i + ' ' + 'update flowlineprob table\t{}'.format(datetime.datetime.now().time()))
     arcpy.JoinField_management("in_memory/FlowlineProbabilities", "COMID", out_feature_class, "COMID", [i])
 
     arcpy.Delete_management(out_feature_class) #delete spatial join class from memory (not needed)
@@ -224,8 +210,7 @@ for i in features: #runs spatial join code for every species of fish
 arcpy.CopyFeatures_management("in_memory/FlowlineProbabilities", "FlowlineProbabilites") #copy output back to disk
 arcpy.Delete_management("in_memory") #clear memory
 
-log.info('End', end='\t')
-log.info(datetime.datetime.now().time())
+log.info('End\t{}'.format(datetime.datetime.now().time()))
 
 
 
