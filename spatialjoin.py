@@ -7,17 +7,16 @@ import arcpy
 log = logging.getLogger("fish_species_occurrence")
 logging.basicConfig()
 
-print('Start', end='\t')
-print(datetime.datetime.now().time())
+log.info('Start', end='\t')
+log.info(datetime.datetime.now().time())
 
-
-def probabilities_dict(nhd_data_gdb_path):
+def get_min_stream_order_by_huc(nhd_flowline, huc12s, output_workspace):
     """
         Builds codeblocks for calculate field
+    :param nhd_data_gdb_path: Path to the geodatabase that has the NHD flowline features in it
     :return: string codeblock to feed into arcgis field calculations
     """
-    # set working directory - flowlines and huc12 (1)
-    arcpy.env.workspace = nhd_data_gdb_path
+    arcpy.env.workspace = output_workspace
     arcpy.env.overwriteOutput = True
 
     log.info('Set working directory to NHDPlusV2', end='\t')
@@ -26,37 +25,40 @@ def probabilities_dict(nhd_data_gdb_path):
     # join nhdFlowline to HUC12's
     log.info('Spatial Join HUC12 to NHD', end='\t')
     log.info(datetime.datetime.now().time())
-    arcpy.SpatialJoin_analysis("NHDFlowline_Network", "HUC12FullState", "FlowlineSpatialJoin", "JOIN_ONE_TO_ONE",
+
+    flowline_features = "FlowlineSpatialJoin"
+    arcpy.SpatialJoin_analysis(nhd_flowline, huc12s, flowline_features, "JOIN_ONE_TO_ONE",
                                match_option="HAVE_THEIR_CENTER_IN")
 
     # create layers
-    target_features = "HUC12FullState"  # NHD data/streams to join to watersheds
-    target_layer = "HUC12_layer"
-    arcpy.MakeFeatureLayer_management(target_features, target_layer)
-    # FIXME: error when running select by location with fish occurrence later on
+    huc12_layer = "HUC12_layer"
+    arcpy.MakeFeatureLayer_management(huc12s, huc12_layer)
+    flowline_layer = "Flowline_layer"
+    arcpy.MakeFeatureLayer_management(flowline_features, flowline_layer)
+    try:
+        # exclude null and coastline from flowlines layer
+        arcpy.SelectLayerByAttribute_management(flowline_layer, "NEW_SELECTION",
+                                                '"StreamOrde" IS NOT NULL AND "StreamOrde" > 0')
 
-    target_features_1 = "FlowlineSpatialJoin"
-    target_layer_1 = "Flowline_layer"
-    arcpy.MakeFeatureLayer_management(target_features_1, target_layer_1)
+        # Summarize HUC12 to find max stream order for each watershed
+        log.info('Run spatial join stats', end='\t')
+        log.info(datetime.datetime.now().time())
+        arcpy.Statistics_analysis(flowline_layer, "Stats_1", [["StreamOrde", "MAX"]], "HUC_12")
 
-    # exclude null and coastline from flowlines layer
-    arcpy.SelectLayerByAttribute_management(target_layer_1, "NEW_SELECTION",
-                                            '"StreamOrde" IS NOT NULL AND "StreamOrde" > 0')
+        # join field to HUC12's
+        all_fields = [field.name for field in arcpy.ListFields(flowline_features)]
 
-    # Summarize HUC12 to find max stream order for each watershed
-    log.info('Run spatial join stats', end='\t')
-    log.info(datetime.datetime.now().time())
-    arcpy.Statistics_analysis(target_layer_1, "Stats_1", [["StreamOrde", "MAX"]], "HUC_12")
+        if "MAX_StreamOrde" in all_fields:
+            arcpy.DeleteField_management(flowline_features, "MAX_StreamOrde")
 
-    # join field to HUC12's
-    fields = [field.name for field in arcpy.ListFields(target_features)]
+        log.info('Join field to HUC12\'s', end='\t')
+        log.info(datetime.datetime.now().time())
+        arcpy.JoinField_management(target_features, "HUC_12", "Stats_1", "HUC_12", ["MAX_StreamOrde"])
+    finally:
+        arcpy.Delete_management(huc12_layer)
+        arcpy.Delete_management(flowline_layer)
 
-    if "MAX_StreamOrde" in fields:
-        arcpy.DeleteField_management(target_features, "MAX_StreamOrde")
-
-    log.info('Join field to HUC12\'s', end='\t')
-    log.info(datetime.datetime.now().time())
-    arcpy.JoinField_management(target_features, "HUC_12", "Stats_1", "HUC_12", ["MAX_StreamOrde"])
+def build_codeblock():
 
     # set working directory - fish occurence (2)
     arcpy.env.workspace = "C:/Users/15303/Documents/CWS_Programming/species_occurence/species_ranges.gdb"
@@ -70,8 +72,7 @@ def probabilities_dict(nhd_data_gdb_path):
     features = arcpy.ListFeatureClasses()
 
     # initiate codeblock string
-    codeblock = """
-def getProbability(species, stream_order, join_count):"""
+    codeblock = """def getProbability(species, stream_order, join_count):"""
 
     # finds minimum of maximum stream orders for every species of fish
     for i in features:
@@ -83,11 +84,11 @@ def getProbability(species, stream_order, join_count):"""
         try:
             log.info(i + ' select by location', end='\t')
             log.info(datetime.datetime.now().time())
-            arcpy.SelectLayerByLocation_management(target_layer, "HAVE_THEIR_CENTER_IN", fish_layer)
+            arcpy.SelectLayerByLocation_management(huc12_layer, "HAVE_THEIR_CENTER_IN", fish_layer)
 
             log.info(i + ' summary statistics', end='\t')
             log.info(datetime.datetime.now().time())
-            arcpy.Statistics_analysis(target_layer, "Stats_" + i, [["MAX_StreamOrde", "MIN"]])
+            arcpy.Statistics_analysis(huc12_layer, "Stats_" + i, [["MAX_StreamOrde", "MIN"]])
         finally:
             arcpy.Delete_management(fish_layer)
 
@@ -142,9 +143,6 @@ def getProbability(species, stream_order, join_count):"""
 \t\treturn str(pdict[species][stream_order])"""
 
     log.info(codeblock)
-
-    arcpy.Delete_management(target_layer)
-    arcpy.Delete_management(target_layer_1)
     return codeblock
 
 
@@ -165,7 +163,7 @@ target_features = "C:/Users/15303/Documents/CWS_Programming/species_occurence/NH
 arcpy.CopyFeatures_management(target_features, "in_memory/FlowlineProbabilities") #copy of nhd data to update with probabilities, to memory
 
 
-codeblock = probabilities_dict() #gets codeblock (dictionary of dictionaries of probabilities per species)
+codeblock = build_codeblock() #gets codeblock (dictionary of dictionaries of probabilities per species)
 
 for i in features: #runs spatial join code for every species of fish
 
