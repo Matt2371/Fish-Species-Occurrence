@@ -41,16 +41,11 @@ def get_max_stream_order_by_huc(nhd_flowline, huc12s,):
 
         # Summarize HUC12 to find max stream order for each watershed
         log.info('Run spatial join stats\t{}'.format(datetime.datetime.now().time()))
-        arcpy.Statistics_analysis(flowline_layer, "Stats_1", [["StreamOrde", "MAX"]], "HUC_12")
-
-        # join field to HUC12's
-        all_fields = [field.name for field in arcpy.ListFields(flowline_features)]
-
-        if "MAX_StreamOrde" in all_fields:
-            arcpy.DeleteField_management(flowline_features, "MAX_StreamOrde")
+        stats_table = geodatabase_tempfile.create_gdb_name("stream_order_stats")
+        arcpy.Statistics_analysis(flowline_layer, stats_table, [["StreamOrde", "MAX"]], "HUC_12")
 
         log.info('Join field to HUC12\'s\t{}'.format(datetime.datetime.now().time()))
-        arcpy.JoinField_management(target_features, "HUC_12", "Stats_1", "HUC_12", ["MAX_StreamOrde"])
+        arcpy.JoinField_management(flowline_features, "HUC_12", stats_table, "HUC_12", ["MAX_StreamOrde"])
     finally:
         arcpy.Delete_management(huc12_layer)
         arcpy.Delete_management(flowline_layer)
