@@ -4,14 +4,17 @@ import logging
 
 import arcpy
 
+import env_manager
+
 log = logging.getLogger("fish_species_occurrence")
 logging.basicConfig()
 
 log.info('Start\t{}'.format(datetime.datetime.now().time()))
 
-def get_min_stream_order_by_huc(nhd_flowline, huc12s, output_workspace):
+
+def get_max_stream_order_by_huc(nhd_flowline, huc12s, output_workspace):
     """
-        Builds codeblocks for calculate field
+       Attaches the maximum stream order in each huc12 to the hucs on a new output layer
     :param nhd_data_gdb_path: Path to the geodatabase that has the NHD flowline features in it
     :return: string codeblock to feed into arcgis field calculations
     """
@@ -52,6 +55,7 @@ def get_min_stream_order_by_huc(nhd_flowline, huc12s, output_workspace):
     finally:
         arcpy.Delete_management(huc12_layer)
         arcpy.Delete_management(flowline_layer)
+
 
 def build_codeblock():
 
@@ -137,80 +141,89 @@ def build_codeblock():
     return codeblock
 
 
-#set working directory
-arcpy.env.workspace = "C:/Users/15303/Documents/CWS_Programming/species_occurence/species_ranges.gdb"
-arcpy.env.overwriteOutput = True
-log.info('Set working directory\t{}'.format(datetime.datetime.now().time()))
+def get_species_feature_classes(workspace):
+    """
+        Gets all the species feature classes in workspace. Tries to be smart by limiting only
+        to polygon feature classes, but doesn't filter GDB results otherwise. Best to use
+        a pre-filtered database.
+    :param workspace:
+    :return:
+    """
+    with env_manager.EnvManager(workspace=workspace):
+        log.info('List feature classes\t{}'.format(datetime.datetime.now().time()))
+        features = arcpy.ListFeatureClasses(feature_type="Polygon")  #creates list of all features classes in working directory (watershed level fish species occurence)
+
+    return features
 
 
-features = arcpy.ListFeatureClasses() #creates list of all features classes in working directory (watershed level fish species occurence)
-log.info('List feature classes\t{}'.format(datetime.datetime.now().time()))
+if __name__ == "__main__":  # if this code is being executed, instead of imported
+    #set working directory
+    arcpy.env.workspace = "C:/Users/15303/Documents/CWS_Programming/species_occurence/species_ranges.gdb"
+    arcpy.env.overwriteOutput = True
+    log.info('Set working directory\t{}'.format(datetime.datetime.now().time()))
+
+    target_features = "C:/Users/15303/Documents/CWS_Programming/species_occurence/NHDPlusV2.gdb/NHDFlowline_Network" #NHD data/streams to join to watersheds
+    arcpy.CopyFeatures_management(target_features, "in_memory/FlowlineProbabilities") #copy of nhd data to update with probabilities, to memory
+
+
+    codeblock = build_codeblock() #gets codeblock (dictionary of dictionaries of probabilities per species)
+
+    for join_features in features: #runs spatial join code for every species of fish
+
+        log.info(i+' '+'spatial join\t{}'.format(datetime.datetime.now().time()))
+        out_feature_class ="in_memory"+ "/" + "SpatialJoin" + "_" + join_features #names output feature class based on species name (join features), output to memory
+        #performs spatial join
+        arcpy.SpatialJoin_analysis(target_features, join_features, out_feature_class, "JOIN_ONE_TO_ONE", match_option = "HAVE_THEIR_CENTER_IN")
+
+
+        log.info(i+' '+'calculate probability\t{}'.format(datetime.datetime.now().time()))
+        #adds probability field
+        arcpy.AddField_management(out_feature_class, i, "TEXT")
+
+        in_table = out_feature_class
+        field = i
+        #expression to be used to fill probability field, calls probability function
+        expression = "getProbability(" + "'" + i + "'" + ", " + "!StreamOrde!, !Join_Count!)" #concatenation to pass speices name into codeblock, getProbability(i, !StreamOrde!, !Join_Count!)
+
+
+    #     codeblock = """
+    # def getProbability(species, stream_order, join_count):
+    #     hardhead_dict = {1:10, 2:20, 3:30, 4:40, 5:50, 6:60, 7: 70, 8: 80, 9:90, 10:100}
+    #     rainbow_trout_dict = {1:10, 2:10, 3:10, 4:10, 5:10, 6:10, 7: 10, 8: 10, 9:10, 10:10}
+    #     pdict = {"hardhead" : hardhead_dict, "rainbow_trout": rainbow_trout_dict}
+    #     #if stream segment not in spatial join, set prob to 0
+    #     if join_count == 0:
+    #         return '0'
+    #     #if stream order is negative (coastline) or does not exist set prob to "NA"
+    #     if stream_order is None or stream_order < 0 or str(stream_order) == 'nan':
+    #         return 'N/A'
+    #     #call stream order/probability dictionary
+    #     else:
+    #         return str(pdict[species][stream_order])"""
 
 
 
-target_features = "C:/Users/15303/Documents/CWS_Programming/species_occurence/NHDPlusV2.gdb/NHDFlowline_Network" #NHD data/streams to join to watersheds
-arcpy.CopyFeatures_management(target_features, "in_memory/FlowlineProbabilities") #copy of nhd data to update with probabilities, to memory
-
-
-codeblock = build_codeblock() #gets codeblock (dictionary of dictionaries of probabilities per species)
-
-for i in features: #runs spatial join code for every species of fish
-
-    log.info(i+' '+'spatial join\t{}'.format(datetime.datetime.now().time()))
-    join_features = i
-    out_feature_class ="in_memory"+ "/" + "SpatialJoin" + "_" + join_features #names output feature class based on species name (join features), output to memory
-    #performs spatial join
-    arcpy.SpatialJoin_analysis(target_features, join_features, out_feature_class, "JOIN_ONE_TO_ONE", match_option = "HAVE_THEIR_CENTER_IN")
-
-
-    log.info(i+' '+'calculate probability\t{}'.format(datetime.datetime.now().time()))
-    #adds probability field
-    arcpy.AddField_management(out_feature_class, i, "TEXT")
-
-    in_table = out_feature_class
-    field = i
-    #expression to be used to fill probability field, calls probability function
-    expression = "getProbability(" + "'" + i + "'" + ", " + "!StreamOrde!, !Join_Count!)" #concatenation to pass speices name into codeblock, getProbability(i, !StreamOrde!, !Join_Count!)
-
-
-#     codeblock = """
-# def getProbability(species, stream_order, join_count):
-#     hardhead_dict = {1:10, 2:20, 3:30, 4:40, 5:50, 6:60, 7: 70, 8: 80, 9:90, 10:100}
-#     rainbow_trout_dict = {1:10, 2:10, 3:10, 4:10, 5:10, 6:10, 7: 10, 8: 10, 9:10, 10:10}
-#     pdict = {"hardhead" : hardhead_dict, "rainbow_trout": rainbow_trout_dict}
-#     #if stream segment not in spatial join, set prob to 0
-#     if join_count == 0:
-#         return '0'
-#     #if stream order is negative (coastline) or does not exist set prob to "NA"
-#     if stream_order is None or stream_order < 0 or str(stream_order) == 'nan':
-#         return 'N/A'
-#     #call stream order/probability dictionary
-#     else:
-#         return str(pdict[species][stream_order])"""
 
 
 
+        #fills out probability field
+        arcpy.CalculateField_management(in_table, field, expression, "Python_9.3", codeblock)
 
 
+        # arcpy.AddIndex_management(out_feature_class, ["COMID"], "idx_COMID", "NON_UNIQUE") #add indexes to spatial join output
+        # arcpy.AddIndex_management(out_feature_class, ["COMID", i], "idx_COMID_prob", "NON_UNIQUE")
+        # arcpy.AddIndex_management(out_feature_class, [i], "idx_prob", "NON_UNIQUE")
 
-    #fills out probability field
-    arcpy.CalculateField_management(in_table, field, expression, "Python_9.3", codeblock)
+        #updates flowlineprob table (output)
+        log.info(i + ' ' + 'update flowlineprob table\t{}'.format(datetime.datetime.now().time()))
+        arcpy.JoinField_management("in_memory/FlowlineProbabilities", "COMID", out_feature_class, "COMID", [i])
 
+        arcpy.Delete_management(out_feature_class) #delete spatial join class from memory (not needed)
 
-    # arcpy.AddIndex_management(out_feature_class, ["COMID"], "idx_COMID", "NON_UNIQUE") #add indexes to spatial join output
-    # arcpy.AddIndex_management(out_feature_class, ["COMID", i], "idx_COMID_prob", "NON_UNIQUE")
-    # arcpy.AddIndex_management(out_feature_class, [i], "idx_prob", "NON_UNIQUE")
+    arcpy.CopyFeatures_management("in_memory/FlowlineProbabilities", "FlowlineProbabilites") #copy output back to disk
+    arcpy.Delete_management("in_memory") #clear memory
 
-    #updates flowlineprob table (output)
-    log.info(i + ' ' + 'update flowlineprob table\t{}'.format(datetime.datetime.now().time()))
-    arcpy.JoinField_management("in_memory/FlowlineProbabilities", "COMID", out_feature_class, "COMID", [i])
-
-    arcpy.Delete_management(out_feature_class) #delete spatial join class from memory (not needed)
-
-arcpy.CopyFeatures_management("in_memory/FlowlineProbabilities", "FlowlineProbabilites") #copy output back to disk
-arcpy.Delete_management("in_memory") #clear memory
-
-log.info('End\t{}'.format(datetime.datetime.now().time()))
+    log.info('End\t{}'.format(datetime.datetime.now().time()))
 
 
 
