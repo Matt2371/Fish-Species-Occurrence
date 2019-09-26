@@ -13,7 +13,9 @@ import env_manager
 # Constants and configuration items
 FLOWLINES = r"C:\Users\dsx\Code\belleflopt\data\NHDPlusV2\NHDPlusV2.gdb\NHDFlowline_Network"
 HUC12S = r"C:\Users\dsx\Code\PISCES\data\PISCES_map_data.gdb\HUC12FullState"
-SPECIES_RANGES = r""
+SPECIES_GROUP = "FlowSensitiveV2"
+HISTORICAL_PRESENCE_TYPES = local_vars.historic_obs_types
+CURRENT_PRESENCE_TYPES = local_vars.current_obs_types
 RATE = 0.5  # exponential base for decaying presence probability
 MAX_PROBABILITY = 0.9  # Probability to use for the MIN(Max Stream Order) for each species - decays at RATE from there
 ABOVE_MAX_PROBABILITY = 1  # Probability to use for stream orders larger than MIN(Max Stream Order)
@@ -149,7 +151,9 @@ def build_codeblock(huc12s,
     return codeblock
 
 
-def get_species_data(species_group="FlowSensitive", presence_for_min_max=local_vars.historic_obs_types, presence_for_probabilities=local_vars.current_obs_types):
+def get_species_data(species_group=SPECIES_GROUP,
+                     presence_for_min_max=HISTORICAL_PRESENCE_TYPES,
+                     presence_for_probabilities=CURRENT_PRESENCE_TYPES):
     """
         Retrieves the HUC12s in a species range as a list per species
     :param species_group:
@@ -183,14 +187,15 @@ if __name__ == "__main__":  # if this code is being executed, instead of importe
     target_features = "C:/Users/15303/Documents/CWS_Programming/species_occurence/NHDPlusV2.gdb/NHDFlowline_Network" #NHD data/streams to join to watersheds
     arcpy.CopyFeatures_management(target_features, "in_memory/FlowlineProbabilities") #copy of nhd data to update with probabilities, to memory
 
-
     codeblock = build_codeblock() #gets codeblock (dictionary of dictionaries of probabilities per species)
 
-    features = get_species_feature_classes()
+    min_max_species_ranges, probability_species_ranges = get_species_data(species_group=SPECIES_GROUP,
+                     presence_for_min_max=HISTORICAL_PRESENCE_TYPES,
+                     presence_for_probabilities=CURRENT_PRESENCE_TYPES)
 
-    for join_features in features: #runs spatial join code for every species of fish
+    for species_id in min_max_species_ranges: # runs spatial join code for every species of fish
 
-        log.info(join_features+' '+'spatial join\t{}'.format(datetime.datetime.now().time()))
+        log.info(species_id+' '+'spatial join\t{}'.format(datetime.datetime.now().time()))
         out_feature_class ="in_memory"+ "/" + "SpatialJoin" + "_" + join_features #names output feature class based on species name (join features), output to memory
         #performs spatial join
         arcpy.SpatialJoin_analysis(target_features, join_features, out_feature_class, "JOIN_ONE_TO_ONE", match_option = "HAVE_THEIR_CENTER_IN")
