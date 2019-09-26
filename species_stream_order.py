@@ -6,10 +6,9 @@ import os
 import arcpy
 
 import geodatabase_tempfile
+from PISCES import api
+from PISCES import local_vars
 import env_manager
-
-log = logging.getLogger("fish_species_occurrence")
-logging.basicConfig()
 
 # Constants and configuration items
 FLOWLINES = r"C:\Users\dsx\Code\belleflopt\data\NHDPlusV2\NHDPlusV2.gdb\NHDFlowline_Network"
@@ -57,7 +56,7 @@ def get_max_stream_order_by_huc(nhd_flowline=FLOWLINES, huc12s=HUC12S,):
     return flowline_features
 
 
-def get_min_max_stream_order_for_species(species_range, huc12_layer):
+def get_min_max_stream_order_for_species(species_name, species_range, huc12_layer):
     """
         Given a path to a species range and an input feature layer of huc 12s, gets the minimum MAX_StreamOrde in
         the range
@@ -65,20 +64,14 @@ def get_min_max_stream_order_for_species(species_range, huc12_layer):
     :param huc12_layer:
     :return:
     """
-    # Create feature layer for fish
-    species_range_name = os.path.split(species_range)[1]
-    fish_layer = species_range_name + "_layer"
-    arcpy.MakeFeatureLayer_management(species_range, fish_layer)
     # select HUC12's by species occurrence and run (min) stats
-    try:
-        log.info(species_range + ' select by location\t{}'.format(datetime.datetime.now().time()))
-        arcpy.SelectLayerByLocation_management(huc12_layer, "HAVE_THEIR_CENTER_IN", fish_layer, selection_type="NEW_SELECTION")
+    species_range_query = "HUC_12 in ('{}')".format("','".join(species_range))
+    log.info(species_range + ' select by location\t{}'.format(datetime.datetime.now().time()))
+    arcpy.SelectLayerByAttribute_management(huc12_layer, selection_type="NEW_SELECTION", where_clause=species_range_query)
 
-        stats_table = "Stats_{}".format(species_range_name)
-        log.info(species_range + ' summary statistics\t{}'.format(datetime.datetime.now().time()))
-        arcpy.Statistics_analysis(huc12_layer, stats_table, [["MAX_StreamOrde", "MIN"]])
-    finally:
-        arcpy.Delete_management(fish_layer)
+    stats_table = "Stats_{}".format(species_name)
+    log.info(species_range + ' summary statistics\t{}'.format(datetime.datetime.now().time()))
+    arcpy.Statistics_analysis(huc12_layer, stats_table, [["MAX_StreamOrde", "MIN"]])
 
     cursor = arcpy.da.SearchCursor(stats_table, ['MIN_MAX_StreamOrde'])
     for row in cursor:  # there's only one row, so this method should be OK to get the correct value
@@ -156,22 +149,30 @@ def build_codeblock(huc12s,
     return codeblock
 
 
-def get_species_feature_classes(workspace):
+def get_species_data(species_group="FlowSensitive", presence_for_min_max=local_vars.historic_obs_types, presence_for_probabilities=local_vars.current_obs_types):
     """
-        Gets all the species feature classes in workspace. Tries to be smart by limiting only
-        to polygon feature classes, but doesn't filter GDB results otherwise. Best to use
-        a pre-filtered database.
-    :param workspace:
+        Retrieves the HUC12s in a species range as a list per species
+    :param species_group:
+    :param presence_for_min_max:
+    :param presence_for_probabilities:
     :return:
     """
-    with env_manager.EnvManager(workspace=workspace):
-        log.info('List feature classes\t{}'.format(datetime.datetime.now().time()))
-        features = arcpy.ListFeatureClasses(feature_type="Polygon")  #creates list of all features classes in working directory (watershed level fish species occurence)
+    min_max_ranges = api.listing.get_hucs_for_species_in_group_as_list(species_group, presence_for_min_max)
+    probability_ranges = api.listing.get_hucs_for_species_in_group_as_list(species_group, presence_for_probabilities)
 
-    return features
+    return min_max_ranges, probability_ranges
 
 
 if __name__ == "__main__":  # if this code is being executed, instead of imported
+
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+    logging.basicConfig(format="%(levelname)s - %(message)s", level=logging.DEBUG)
+    log = logging.getLogger("species_stream_order")
+
+    consoleLog = logging.StreamHandler()
+    consoleLog.setLevel(logging.INFO)
+    log.addHandler(consoleLog)
 
     log.info('Start\t{}'.format(datetime.datetime.now().time()))
 

@@ -3,6 +3,7 @@ import pytest
 import species_stream_order
 import support
 
+
 def test_max_stream_order_by_huc(flowlines=species_stream_order.FLOWLINES, huc12s=species_stream_order.HUC12S):
 	max_stream_order_fc = species_stream_order.get_max_stream_order_by_huc(nhd_flowline=flowlines, huc12s=huc12s)
 
