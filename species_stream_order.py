@@ -13,7 +13,7 @@ import env_manager
 # Constants and configuration items
 FLOWLINES = r"C:\Users\dsx\Code\belleflopt\data\NHDPlusV2\NHDPlusV2.gdb\NHDFlowline_Network"
 HUC12S = r"C:\Users\dsx\Code\PISCES\data\PISCES_map_data.gdb\HUC12FullState"
-SPECIES_GROUP = "FlowSensitiveV2"
+SPECIES_GROUP = "Wide_Ranging"
 HISTORICAL_PRESENCE_TYPES = local_vars.historic_obs_types
 CURRENT_PRESENCE_TYPES = local_vars.current_obs_types
 RATE = 0.5  # exponential base for decaying presence probability
@@ -28,13 +28,11 @@ def get_max_stream_order_by_huc(nhd_flowline=FLOWLINES, huc12s=HUC12S,):
     :return: geodatabase feature class of huc 12s with max stream order attached
     """
 
-    log.info('Set working directory to NHDPlusV2\t{}'.format(datetime.datetime.now().time()))
-
     # join nhdFlowline to HUC12's
     log.info('Spatial Join HUC12 to NHD\t{}'.format(datetime.datetime.now().time()))
 
     flowline_features = geodatabase_tempfile.create_gdb_name("FlowlineSpatialJoin")
-    arcpy.SpatialJoin_analysis(nhd_flowline, huc12s, flowline_features, "JOIN_ONE_TO_ONE",
+    arcpy.SpatialJoin_analysis(huc12s, nhd_flowline, flowline_features, "JOIN_ONE_TO_ONE",
                                match_option="HAVE_THEIR_CENTER_IN")
 
     # create layers
@@ -58,24 +56,31 @@ def get_max_stream_order_by_huc(nhd_flowline=FLOWLINES, huc12s=HUC12S,):
     return flowline_features
 
 
+def select_species_range(range_list, species_name, huc12_layer):
+    species_range_query = "HUC_12 in ('{}')".format("','".join(range_list))
+    log.info(species_name + ' select by attribute for species range\t{}'.format(datetime.datetime.now().time()))
+    arcpy.SelectLayerByAttribute_management(huc12_layer, selection_type="NEW_SELECTION", where_clause=species_range_query)
+
+
 def get_min_max_stream_order_for_species(species_name, species_range, huc12_layer):
     """
         Given a path to a species range and an input feature layer of huc 12s, gets the minimum MAX_StreamOrde in
         the range
+    :param species_name:
     :param species_range:
     :param huc12_layer:
     :return:
     """
     # select HUC12's by species occurrence and run (min) stats
-    species_range_query = "HUC_12 in ('{}')".format("','".join(species_range))
-    log.info(species_range + ' select by location\t{}'.format(datetime.datetime.now().time()))
-    arcpy.SelectLayerByAttribute_management(huc12_layer, selection_type="NEW_SELECTION", where_clause=species_range_query)
+    select_species_range(species_range, species_name, huc12_layer)
 
     stats_table = "Stats_{}".format(species_name)
-    log.info(species_range + ' summary statistics\t{}'.format(datetime.datetime.now().time()))
+    log.info(species_name + ' summary statistics\t{}'.format(datetime.datetime.now().time()))
+    log.info(stats_table)
     arcpy.Statistics_analysis(huc12_layer, stats_table, [["MAX_StreamOrde", "MIN"]])
 
     cursor = arcpy.da.SearchCursor(stats_table, ['MIN_MAX_StreamOrde'])
+    min_stream = None
     for row in cursor:  # there's only one row, so this method should be OK to get the correct value
         log.info(row[0])
         min_stream = row[0]
@@ -84,7 +89,7 @@ def get_min_max_stream_order_for_species(species_name, species_range, huc12_laye
 
 
 def build_codeblock(huc12s,
-                    species_range_geodatabase=SPECIES_RANGES,
+                    species_data,
                     rate=RATE,
                     max_probability=MAX_PROBABILITY,
                     above_max_probability=ABOVE_MAX_PROBABILITY):
@@ -92,28 +97,20 @@ def build_codeblock(huc12s,
         Builds the code block with the probabilities for each species by stream order that we'll use when we run field
         calculator.
     :param huc12s:
+    :param species_data: dictionary keyed by species code that includes a list a of HUC12 IDs for the species.
     :param rate:
     :param max_probability:
     :param above_max_probability:
-    :param species_range_geodatabase:
     :return:
     """
     huc12_layer = "HUC12_layer"
     arcpy.MakeFeatureLayer_management(huc12s, huc12_layer)
     try:
-        # set working directory - fish occurence (2)
-        arcpy.env.workspace = species_range_geodatabase
-        log.info('Set working directory to species ranges\t{}'.format(datetime.datetime.now().time()))
-
-        # creates list of all features classes in working directory (watershed level fish species occurence)
-        log.info('List feature classes\t{}'.format(datetime.datetime.now().time()))
-        species_features = arcpy.ListFeatureClasses()
-
         # finds minimum of maximum stream orders for every species of fish
         species_dict = {}
-        for species in species_features:
+        for species in species_data:
 
-            min_stream = get_min_max_stream_order_for_species(os.path.join(species_range_geodatabase, species), huc12_layer)
+            min_stream = get_min_max_stream_order_for_species(species, species_data[species], huc12_layer)
 
             individual_dict = {}
             stream_list = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
@@ -180,50 +177,62 @@ if __name__ == "__main__":  # if this code is being executed, instead of importe
 
     log.info('Start\t{}'.format(datetime.datetime.now().time()))
 
-    arcpy.env.workspace = "C:/Users/15303/Documents/CWS_Programming/species_occurence/species_ranges.gdb"
+    arcpy.env.workspace = geodatabase_tempfile.get_temp_gdb()
     arcpy.env.overwriteOutput = True
-    log.info('Set working directory\t{}'.format(datetime.datetime.now().time()))
+    log.info('Set working gdb to {}\t{}'.format(arcpy.env.workspace, datetime.datetime.now().time()))
 
-    target_features = "C:/Users/15303/Documents/CWS_Programming/species_occurence/NHDPlusV2.gdb/NHDFlowline_Network" #NHD data/streams to join to watersheds
-    arcpy.CopyFeatures_management(target_features, "in_memory/FlowlineProbabilities") #copy of nhd data to update with probabilities, to memory
+    initial_target_features = FLOWLINES
+    #arcpy.AddIndex_management(target_features, ["COMID"], "idx2_COMID", "NON_UNIQUE") #add indexes to spatial join output
 
-    codeblock = build_codeblock() #gets codeblock (dictionary of dictionaries of probabilities per species)
+    joined_flow_data = get_max_stream_order_by_huc(nhd_flowline=initial_target_features)
+    target_features = "in_memory/FlowlineProbabilities"
+    arcpy.CopyFeatures_management(joined_flow_data, target_features)  # copy of nhd data to update with probabilities, to memory
+
+    huc_12_data = "in_memory/HUC12s"
+    arcpy.CopyFeatures_management(joined_flow_data, target_features)  # copy of nhd data to update with probabilities, to memory
 
     min_max_species_ranges, probability_species_ranges = get_species_data(species_group=SPECIES_GROUP,
                      presence_for_min_max=HISTORICAL_PRESENCE_TYPES,
                      presence_for_probabilities=CURRENT_PRESENCE_TYPES)
 
-    for species_id in min_max_species_ranges: # runs spatial join code for every species of fish
+    codeblock = build_codeblock(HUC12S, min_max_species_ranges)  # gets codeblock (dictionary of dictionaries of probabilities per species)
 
-        log.info(species_id+' '+'spatial join\t{}'.format(datetime.datetime.now().time()))
-        out_feature_class ="in_memory"+ "/" + "SpatialJoin" + "_" + join_features #names output feature class based on species name (join features), output to memory
+    huc_12_layer = "SPECIES_RANGE_SELECTION_LAYER"
+    arcpy.MakeFeatureLayer_management(HUC12S, huc_12_layer)
+    for species_id in min_max_species_ranges:  # runs spatial join code for every species of fish
+
+        select_species_range(min_max_species_ranges[species_id], species_id, huc_12_layer)
+
+        log.info('{} spatial join\t{}'.format(species_id, datetime.datetime.now().time()))
+        out_feature_class ="in_memory" + "/" + "SpatialJoin" + "_" + species_id  # names output feature class based on species name (join features), output to memory
         #performs spatial join
-        arcpy.SpatialJoin_analysis(target_features, join_features, out_feature_class, "JOIN_ONE_TO_ONE", match_option = "HAVE_THEIR_CENTER_IN")
+        arcpy.SpatialJoin_analysis(target_features, species_id, out_feature_class, "JOIN_ONE_TO_ONE", match_option="HAVE_THEIR_CENTER_IN")
 
 
-        log.info(join_features+' '+'calculate probability\t{}'.format(datetime.datetime.now().time()))
+        log.info(species_id + ' ' + 'calculate probability\t{}'.format(datetime.datetime.now().time()))
         #adds probability field
-        arcpy.AddField_management(out_feature_class, join_features, "TEXT")
+        arcpy.AddField_management(out_feature_class, species_id, "TEXT")
 
         in_table = out_feature_class
-        #expression to be used to fill probability field, calls probability function
-        expression = "getProbability(" + "'" + join_features + "'" + ", " + "!StreamOrde!, !Join_Count!)" #concatenation to pass speices name into codeblock, getProbability(i, !StreamOrde!, !Join_Count!)
+        # expression to be used to fill probability field, calls probability function
+        expression = "getProbability(" + "'" + species_id + "'" + ", " + "!StreamOrde!, !Join_Count!)"  # concatenation to pass speices name into codeblock, getProbability(i, !StreamOrde!, !Join_Count!)
 
         #fills out probability field
-        arcpy.CalculateField_management(in_table, join_features, expression, "Python_9.3", codeblock)
+        arcpy.CalculateField_management(in_table, species_id, expression, "Python_9.3", codeblock)
 
-        # arcpy.AddIndex_management(out_feature_class, ["COMID"], "idx_COMID", "NON_UNIQUE") #add indexes to spatial join output
-        # arcpy.AddIndex_management(out_feature_class, ["COMID", i], "idx_COMID_prob", "NON_UNIQUE")
-        # arcpy.AddIndex_management(out_feature_class, [i], "idx_prob", "NON_UNIQUE")
+        #arcpy.AddIndex_management(target_features, ["COMID", species_id], "idx_COMID_prob", "NON_UNIQUE")
+        #arcpy.AddIndex_management(target_features, [species_id], "idx_prob", "NON_UNIQUE")
 
-        #updates flowlineprob table (output)
-        log.info(join_features + ' ' + 'update flowlineprob table\t{}'.format(datetime.datetime.now().time()))
-        arcpy.JoinField_management("in_memory/FlowlineProbabilities", "COMID", out_feature_class, "COMID", [i])
+        # updates flowlineprob table (output)
+        log.info(species_id + ' ' + 'update flowlineprob table\t{}'.format(datetime.datetime.now().time()))
+        arcpy.JoinField_management("in_memory/FlowlineProbabilities", "COMID", out_feature_class, "COMID", [species_id])
 
         arcpy.Delete_management(out_feature_class)  # delete spatial join class from memory (not needed)
 
-    arcpy.CopyFeatures_management("in_memory/FlowlineProbabilities", "FlowlineProbabilites") #copy output back to disk
-    arcpy.Delete_management("in_memory") #clear memory
+    output = os.path.join(arcpy.env.workspace, "FlowlineProbabilites")
+    arcpy.CopyFeatures_management("in_memory/FlowlineProbabilities", output)  # copy output back to disk
+
+    log.info("Output Written to Disk at {}".format(output))
 
     log.info('End\t{}'.format(datetime.datetime.now().time()))
 
