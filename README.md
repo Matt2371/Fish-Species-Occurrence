@@ -24,3 +24,6 @@ or lake resident). Across the species' *historical* range, we find the minimum S
 outlet segments, and make that the "prime" stream order, which represents the stream order above which we assume the
 species to be present, at least within their *current* range. More formal representations of this calculation
 are forthcoming, or [get in touch](https://watershed.ucdavis.edu/user/64/contact)
+
+## Results
+See [Releases](releases) for the latest data and information on using it.
