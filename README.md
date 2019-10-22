@@ -14,8 +14,8 @@ wide ranging species than those with narrow ranges, or which are resident in lak
 While PISCES data contain range information, it is granular enough to often be used to represent *actual* presence
 in streams within a watershed. Based on the scale mismatch, it is risky to make this assumption. This code is an effort
 to better represent uncertainty at the stream segment level if the data are being used that way. It also represents a first pass
-estimate, not a rigorous evaluation of species presence at the stream segment level. *Use it only very carefully and if
-you understand both the transformation described below and what it means for the data.*
+estimate, not a rigorous evaluation of species presence at the stream segment level. **Use it only very carefully and if
+you understand both the transformation described below and what it means for the data.**
 
 ## The approach
 First we calculate a "prime" stream order for each species. We assume that if a species is in a HUC12, then it is in
