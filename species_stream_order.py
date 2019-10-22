@@ -10,6 +10,8 @@ from PISCES import api
 from PISCES import local_vars
 import env_manager
 
+DEBUG = True  # just handles cleanup operations differently when on.
+
 # Constants and configuration items
 FLOWLINES = r"C:\Users\dsx\Code\belleflopt\data\NHDPlusV2\NHDPlusV2.gdb\NHDFlowline_Network"
 HUC12S = r"C:\Users\dsx\Code\PISCES\data\PISCES_map_data.gdb\HUC12FullState"
@@ -147,9 +149,9 @@ def build_codeblock(huc12s,
             for j in stream_list:  # count down stream orders
                 if j > min_stream:
                     individual_dict[j] = above_max_probability
-                if j == min_stream:
+                elif j == min_stream:
                     individual_dict[j] = max_probability
-                if j <= min_stream:
+                elif j < min_stream:
                     individual_dict[j] = max_probability * (rate) ** iteration
                     iteration += 1  # if i is less than or equal to min stream order, decrease probability per iteration exponentially
 
@@ -161,14 +163,12 @@ def build_codeblock(huc12s,
 
         codeblock += """\n\ndef getProbability(species, stream_order, join_count):
 \t#if stream segment not in spatial join, set prob to 0    
-\tif join_count == 0:
+\tif join_count is None or join_count == 0:
 \t\treturn '0'
-\t\t#if stream order is negative (coastline) or does not exist set prob to "NA"
-\tif stream_order is None or stream_order < 0 or str(stream_order) == 'nan':
-\t\treturn 'N/A'
-\t\t#call stream order/probability dictionary
-\telse:
-\t\treturn str(pdict[species][stream_order])"""
+\tif stream_order is None or stream_order < 0 or str(stream_order) == 'nan': #if stream order is negative (coastline) or does not exist set prob to None
+\t\treturn None
+\telse: #call stream order/probability dictionary
+\t\treturn pdict[species][stream_order]"""
 
         log.info(codeblock)
     finally:
@@ -192,6 +192,25 @@ def get_species_data(species_group=SPECIES_GROUP,
     probability_ranges = api.listing.get_hucs_for_species_in_group_as_list(species_group, presence_for_probabilities)
 
     return min_max_ranges, probability_ranges
+
+
+def get_species_data_TEST(species_group="IGNORED_TEST_FUNCTION",
+                     presence_for_min_max=HISTORICAL_PRESENCE_TYPES,
+                     presence_for_probabilities=CURRENT_PRESENCE_TYPES,
+                        species_code="CMC01",):
+    """
+        Retrieves the HUC12s in a species range as a list per species
+    :param species_group:
+    :param presence_for_min_max:
+    :param presence_for_probabilities:
+    :return:
+    """
+    log.info("Getting species data from PISCES")
+    min_max_ranges = api.listing.get_hucs_for_species_as_list(species_code, presence_for_min_max)
+    probability_ranges = api.listing.get_hucs_for_species_as_list(species_code, presence_for_probabilities)
+
+    return {species_code: min_max_ranges}, {species_code: probability_ranges}
+
 
 
 if __name__ == "__main__":  # if this code is being executed, instead of imported
@@ -228,14 +247,19 @@ if __name__ == "__main__":  # if this code is being executed, instead of importe
         select_species_range(probability_species_ranges[species_id], species_id, huc_12_layer)
 
         log.info('{} spatial join\t{}'.format(species_id, datetime.datetime.now().time()))
-        out_feature_class ="in_memory" + "/" + "SpatialJoin" + "_" + species_id  # names output feature class based on species name (join features), output to memory
-        #performs spatial join - the species range is selected in the huc 12 layer, so only that part should be joined to the target
-        arcpy.SpatialJoin_analysis(target_features, huc_12_layer, out_feature_class, "JOIN_ONE_TO_ONE", match_option="HAVE_THEIR_CENTER_IN")
 
+        # this was much faster when using in_memory datasets, but it was failing randomly after many iterations
+        # decided to try it on disk and it appears more stable
+        out_feature_class = geodatabase_tempfile.create_gdb_name("SpatialJoin_{}".format(species_id))  #  "in_memory/SpatialJoin_{}".format(species_id)  # names output feature class based on species name (join features), output to memory
+        if DEBUG:  # we'll only log this if the flag is set - better strategy would be to log.debug, but we're not setting up logging handlers to separate right now.
+            log.info(out_feature_class)
+
+        # performs spatial join - the species range is selected in the huc 12 layer, so only that part should be joined to the target
+        arcpy.SpatialJoin_analysis(target_features, huc_12_layer, out_feature_class, "JOIN_ONE_TO_ONE", match_option="HAVE_THEIR_CENTER_IN")
 
         log.info(species_id + ' ' + 'calculate probability\t{}'.format(datetime.datetime.now().time()))
         #adds probability field
-        arcpy.AddField_management(out_feature_class, species_id, "TEXT")
+        arcpy.AddField_management(out_feature_class, species_id, "FLOAT")
 
         in_table = out_feature_class
         # expression to be used to fill probability field, calls probability function
@@ -251,7 +275,8 @@ if __name__ == "__main__":  # if this code is being executed, instead of importe
         log.info(species_id + ' ' + 'update flowlineprob table\t{}'.format(datetime.datetime.now().time()))
         arcpy.JoinField_management("in_memory/FlowlineProbabilities", "COMID", out_feature_class, "COMID", [species_id])
 
-        arcpy.Delete_management(out_feature_class)  # delete spatial join class from memory (not needed)
+        if not DEBUG:
+            arcpy.Delete_management(out_feature_class)  # delete spatial join class from memory (not needed)
 
     output = os.path.join(arcpy.env.workspace, "FlowlineProbabilites")
     arcpy.CopyFeatures_management("in_memory/FlowlineProbabilities", output)  # copy output back to disk
