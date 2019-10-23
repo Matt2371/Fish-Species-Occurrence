@@ -5,8 +5,8 @@ occurrence based on stream order.
 ![Animation of transition from ranges to probabilistic segments](docs/probabilistic_pisces_animation.gif)
 
 ## The problem
-While California contains about 4,600 HUC12s, it contains ~160,000 NHD Stream Segments. The HUC12s are the coarsest
-valid observation unit in PISCES, so this scale adjustment adds additional uncertainty to the species records. In order
+While California contains about 4,600 HUC12 subwatersheds, it contains ~160,000 NHD Stream Segments. The HUC12s are the coarsest
+valid observation unit in [PISCES](https://pisces.ucdavis.edu), so this scale adjustment adds additional uncertainty to the species records. In order
 to attach this additional uncertainty, the code here uses an approach based on Strahler stream order and the species'
 entire range to probabilistically assign species to segments within their broader range. This approach is more valid for
 wide ranging species than those with narrow ranges, or which are resident in lakes. 
