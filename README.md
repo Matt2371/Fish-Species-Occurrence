@@ -26,4 +26,4 @@ species to be present, at least within their *current* range. More formal repres
 are forthcoming, or [get in touch](https://watershed.ucdavis.edu/user/64/contact)
 
 ## Results
-See [Releases](releases) for the latest data and information on using it.
+See [Releases](https://github.com/ceff-tech/ProbabilisticPISCES/releases) for the latest data and information on using it.
