@@ -10,6 +10,8 @@ from PISCES import api
 from PISCES import local_vars
 import env_manager
 
+log = logging.getLogger("species_stream_order")
+
 DEBUG = True  # just handles cleanup operations differently when on.
 
 # Constants and configuration items
@@ -116,6 +118,22 @@ def get_min_max_stream_order_for_species(species_name, species_range, huc12_laye
     return min_stream
 
 
+def print_stream_order_for_species(huc12s, species_data):
+    log.info("Building codeblock")
+
+    huc12_layer = "HUC12_layer"
+    arcpy.MakeFeatureLayer_management(huc12s, huc12_layer)
+    try:
+        for species in species_data:
+
+            min_stream = get_min_max_stream_order_for_species(species, species_data[species], huc12_layer)
+            print("{}: {}".format(species, min_stream))
+
+    finally:
+        arcpy.Delete_management(huc12_layer)
+
+
+
 def build_codeblock(huc12s,
                     species_data,
                     rate=RATE,
@@ -218,7 +236,6 @@ if __name__ == "__main__":  # if this code is being executed, instead of importe
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
     logging.basicConfig(format="%(levelname)s - %(message)s", level=logging.DEBUG)
-    log = logging.getLogger("species_stream_order")
 
     consoleLog = logging.StreamHandler()
     consoleLog.setLevel(logging.INFO)
