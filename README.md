@@ -52,7 +52,8 @@ order for the taxon and S is the stream order of the segment being evaluated.
 | 3   | 1    | 1     | 0.9    | 0.45    | 0.225  |
 | 4   | 1    | 0.9   | 0.45   | 0.225   | 0.1125 |
 | 5   | 0.9  | 0.45  | 0.225  | 0.1125  | 0.0563 |
-Here are the probabilities used for each stream order based on the primary stream order for a species
+
+The table shows the probabilities used for each stream order based on the primary stream order for a taxon
 
 
 ## Results
